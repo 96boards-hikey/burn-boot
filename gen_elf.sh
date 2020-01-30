@@ -33,7 +33,7 @@ echo "Done"
 
 echo "begin to generate pyc file..."
 
-python -m py_compile hisi-idt.py
+python3 -m py_compile hisi-idt.py
 mv hisi-idt.pyc ./out
 
 echo "Done"
