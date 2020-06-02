@@ -88,7 +88,7 @@ class bootdownload(object):
 
     def calc_crc(self, data, crc=0):
         for char in data:
-            crc = ((crc << 8) | ord(char)) ^ self.crctable[(crc >> 8) & 0xff]
+            crc = ((crc << 8) | char) ^ self.crctable[(crc >> 8) & 0xff]
         for i in range(0,2):
             crc = ((crc << 8) | 0) ^ self.crctable[(crc >> 8) & 0xff]
         return crc & 0xffff
@@ -114,10 +114,9 @@ class bootdownload(object):
 
     def sendstartframe(self):
         self.s.timeout =0.01
-        data = array.array('B', self.startframe[self.chip]).tostring()
+        data = array.array('B', self.startframe[self.chip]).tobytes()
         crc = self.calc_crc(data)
-        data += chr((crc >> 8)&0xff)
-        data += chr(crc&0xff)
+        data += bytes([(crc >> 8) & 0xff, crc & 0xff])
         self.sendframe(data,10000)
 
     def sendheadframe(self,length,address):
@@ -131,36 +130,29 @@ class bootdownload(object):
         self.headframe[self.chip][10] = (address>>8)&0xff
         self.headframe[self.chip][11] = (address)&0xff
 
-        data = array.array('B', self.headframe[self.chip]).tostring()
+        data = array.array('B', self.headframe[self.chip]).tobytes()
         crc = self.calc_crc(data)
 
-        data += chr((crc >> 8)&0xff)
-        data += chr(crc&0xff)
+        data += bytes([(crc >> 8) & 0xff, crc & 0xff])
 
         self.sendframe(data,16)
 
 
     def senddataframe(self,seq,data):
         self.s.timeout = 0.15
-        head = chr(0xDA)
-        head += chr(seq&0xFF)
-        head += chr((~seq)&0xFF)
+        head = bytes([0xDA, seq & 0xFF, (~seq) & 0xFF])
 
         data = head + data
 
         crc = self.calc_crc(data)
-        data += chr((crc >> 8)&0xff)
-        data += chr(crc&0xff)
+        data += bytes([(crc >> 8) & 0xff, crc & 0xff])
 
         self.sendframe(data,32)
 
     def sendtailframe(self,seq):
-        data = chr(0xED)
-        data += chr(seq&0xFF)
-        data += chr((~seq)&0xFF)
+        data = bytes([0xED, seq & 0xFF, (~seq) & 0xFF])
         crc = self.calc_crc(data)
-        data += chr((crc >> 8)&0xff)
-        data += chr(crc&0xff)
+        data += bytes([(crc >> 8) & 0xff, crc & 0xff])
 
         self.sendframe(data,16)
 
