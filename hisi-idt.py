@@ -104,9 +104,8 @@ class bootdownload(object):
             self.s.flushInput()
             try:
                 ack = self.s.read()
-                if len(ack) == 1:
-                    if ack == chr(0xaa):
-                        return None
+                if ack == b'\xaa':
+                    return None
             except:
                 return None
 
