@@ -6,6 +6,8 @@ import os.path
 import serial, time
 import array
 import sys, getopt
+import errno
+import time
 
 class bootdownload(object):
     '''
@@ -71,15 +73,39 @@ class bootdownload(object):
     BOOT_HEAD_LEN = 0x4F00
     MAX_DATA_LEN  = 0x400
 
-    def __init__(self,chiptype,serialport):
-        try:
-            self.s = serial.Serial(port=serialport, baudrate=115200, timeout=1)
-        except serial.serialutil.SerialException:
-            #no serial connection
-            self.s = None
-            print("\nFailed to open serial!", serialport)
-            sys.exit(2)
-
+    def __init__(self,chiptype,serialports):
+        retries = 35
+        for i in range(retries, 0, -1):
+            try:
+                lastport = serialports[len(serialports) - 1];
+                for port in serialports:
+                    try:
+                        self.s = serial.Serial(port=port, baudrate=115200, timeout=1)
+                    except serial.SerialException as exc:
+                        if exc.errno == errno.ENOENT and port != lastport:
+                            continue
+                        raise exc
+                    break
+            except serial.SerialException as exc:
+                self.s = None
+                if exc.errno == errno.ENOENT or exc.errno == errno.EBUSY:
+                    if i == retries:
+                        sys.stdout.write("Waiting for device... ")
+                    sys.stdout.write("[{}]".format(i))
+                    sys.stdout.flush()
+                    if i == 0:
+                        print("\n", exc)
+                        if exc.errno == errno.EBUSY:
+                            sys.exit(2)
+                        else:
+                            sys.exit(3)
+                    time.sleep(1)
+                    continue
+                else:
+                    print(exc)
+                    sys.exit(2)
+            break
+        print()
         self.chip = chiptype
 
     def __del__(self):
@@ -104,9 +130,8 @@ class bootdownload(object):
             self.s.flushInput()
             try:
                 ack = self.s.read()
-                if len(ack) == 1:
-                    if ack == chr(0xaa):
-                        return None
+                if ack == b'\xaa':
+                    return None
             except:
                 return None
 
@@ -188,28 +213,9 @@ class bootdownload(object):
             print('Done\n')
 
 
-def burnboot(chiptype, serialport, filename1, filename2=''):
-    downloader = bootdownload(chiptype, serialport)
+def burnboot(chiptype, serialports, filename1, filename2=''):
+    downloader = bootdownload(chiptype, serialports)
     downloader.download(filename1, filename2)
-
-def startterm(serialport=0):
-    try:
-        miniterm = Miniterm(
-            serialport,
-            115200,
-            'N',
-            rtscts=False,
-            xonxoff=False,
-            echo=False,
-            convert_outgoing=2,
-            repr_mode=0,
-        )
-    except serial.SerialException as e:
-        sys.stderr.write("could not open port %r: %s\n" % (port, e))
-        sys.exit(1)
-    miniterm.start()
-    miniterm.join(True)
-    miniterm.join()
 
 def main(argv):
     '''
@@ -218,8 +224,8 @@ def main(argv):
     img1 = 'fastboot1.img'
     img2 = ''
     dev  = '';
-    dev1 = '/dev/serial/by-id/usb-䕇䕎䥎_㄰㌲㔴㜶㤸-if00-port0'
-    dev2 = '/dev/serial/by-id/pci-䕇䕎䥎_㄰㌲㔴㜶㤸-if00-port0'
+    serialports = ['/dev/serial/by-id/usb-䕇䕎䥎_㄰㌲㔴㜶㤸-if00-port0',
+                   '/dev/serial/by-id/pci-䕇䕎䥎_㄰㌲㔴㜶㤸-if00-port0']
     try:
         opts, args = getopt.getopt(argv,"hd:",["img1=","img2="])
     except getopt.GetoptError:
@@ -235,14 +241,8 @@ def main(argv):
             img1 = arg
         elif opt in ("--img2"):
             img2 = arg
-    if dev == '':
-        if os.path.exists(dev1):
-            dev = dev1
-        elif os.path.exists(dev2):
-            dev = dev2
-        else:
-            print('Device not detected under /dev/serial/by-id/. Please use -d.')
-            sys.exit(3)
+    if dev != '':
+        serialports = [ dev1 ]
     print('+----------------------+')
     print(' Serial: ', dev)
     print(' Image1: ', img1)
@@ -258,7 +258,7 @@ def main(argv):
             print("Image don't exists:", img2)
             sys.exit(1)
 
-    burnboot('hi3716cv200', dev, img1, img2)
+    burnboot('hi3716cv200', serialports, img1, img2)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
